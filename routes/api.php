@@ -1,6 +1,7 @@
 <?php
 
-use Illuminate\Http\Request;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PasswordResetController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -15,16 +16,29 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::group([
-    'middleware' => 'api',
     'namespace' => 'App\Http\Controllers',
     'prefix' => 'auth'
  
 ], function ($router) {
     Route::post('/login', 'Api\AuthController@login');
     Route::post('/register','Api\AuthController@register');
-    Route::post('/logout', 'Api\AuthController@logout');
     Route::post('/refresh', 'Api\AuthController@refresh');
-    Route::get('/user-profile','Api\AuthController@userProfile');
-    Route::post('/change-pass', 'Api\AuthController@changePassWord');   
 });
+
+Route::post('password/send-reset-code', [PasswordResetController::class, 'sendResetCode']);
+Route::post('password/verify-reset-code', [PasswordResetController::class, 'verifyResetCode']);
+Route::post('password/reset', [PasswordResetController::class, 'resetPassword']);
+
+
+Route::group([
+    'middleware' => 'jwt.verify',
+    'namespace' => 'App\Http\Controllers',
+    'prefix' => 'auth'
+ 
+], function ($router) {
+    Route::post('/logout', 'Api\AuthController@logout');
+    Route::get('/user-profile','Api\AuthController@userProfile');
+});
+
+
 
