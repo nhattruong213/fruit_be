@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
+use Exception;
+use Tymon\JWTAuth\Exceptions\JWTException;
+use Tymon\JWTAuth\Facades\JWTAuth;
 use Validator;
 
 class AuthController extends Controller
@@ -38,8 +41,10 @@ class AuthController extends Controller
         if (! $token = auth('api')->attempt($validator->validated())) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
+
+        $refreshToken = $this->createRefreshToken();
  
-        return $this->createNewToken($token);
+        return $this->createNewToken($token, $refreshToken);
     }
  
     /**
@@ -87,7 +92,19 @@ class AuthController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     public function refresh() {
-        return $this->createNewToken(auth('api')->refresh());
+        $refreshToken = request()->refresh_token;
+        try {
+            $decode = JWTAuth::getJWTProvider()->decode($refreshToken);
+            $user = User::find($decode['sub']);
+            if (!$user) {
+                return response()->json(['error' => 'User not found'], 404);
+            }
+            $token = auth('api')->login($user);
+            $refreshToken = $this->createRefreshToken();
+            return $this->createNewToken($token, $refreshToken);
+        } catch (JWTException $e) {
+            return response()->json(['error' => 'Refresh Token Invalid'], 500);
+        }
     }
  
     /**
@@ -106,9 +123,10 @@ class AuthController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    protected function createNewToken($token){
+    protected function createNewToken($token, $refreshToken){
         return response()->json([
             'access_token' => $token,
+            'refresh_token' => $refreshToken,
             'token_type' => 'bearer',
             'expires_in' => auth('api')->factory()->getTTL() * 60,
         ]);
@@ -133,6 +151,16 @@ class AuthController extends Controller
             'message' => 'User successfully changed password',
             'user' => $user,
         ], 201);
+    }
+
+    private function createRefreshToken() {
+        $data = [
+            'sub' => auth('api')->user()->id,
+            'random' => rand() . time(),
+            'exp' => time() +  config('jwt.refresh_ttl'),
+        ];
+
+        return JWTAuth::getJWTProvider()->encode($data);
     }
 
 }
